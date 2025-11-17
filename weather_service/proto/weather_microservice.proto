@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package weather_microservice;
+
+service WeatherService {
+    rpc GetWeather (WeatherRequest) returns (WeatherResponse);
+}
+
+//Request message 
+message WeatherRequest {
+    string city = 1;
+}
+
+//Response message
+message WeatherResponse {
+    string city = 1;
+    string country = 2;
+    Coordinates coord = 3;
+    double temperature = 4;
+    double feels_like = 5;
+    double temp_min = 6;
+    double temp_max = 7;
+    int32 pressure = 8;
+    int32 humidity = 9;
+    double wind_speed = 10;
+    int32 wind_deg = 11;
+    double wind_gust = 12;
+    string main_condition = 13;
+    string description = 14;
+    double rain_1h = 15;
+    int32 clouds = 16;
+    int64 timestamp = 17;
+}
+
+//mesage for Coordinates
+message Coordinates {
+    double lon = 1;
+    double lat = 2;
+}
