@@ -30,16 +30,18 @@ def get_current_weather(city_name: str):
                 return {"error": "Empty response from server"}
 
             return {
-                "city": response.city,
-                "country": response.country,
-                "temperature": round(response.temperature, 2),
-                "feels_like": round(response.feels_like, 2),
-                "humidity": response.humidity,
-                "wind_speed": response.wind_speed,
-                "description": response.description.capitalize(),
-                "clouds": response.clouds,
-                "timestamp": response.timestamp,
-            }
+                    "city": response.city,
+                    "country": response.country,
+                    "temperature": round(response.temperature, 2),
+                    "feels_like": round(response.feels_like, 2),
+                    "humidity": response.humidity,
+                    "wind_speed": response.wind_speed,
+                    "description": response.description.capitalize(),
+                    "clouds": response.clouds,
+                    "timestamp": response.timestamp,
+                    "api_timestamp": getattr(response, "api_timestamp", None),
+                    "request_timestamp": getattr(response, "request_timestamp", None)
+                }
 
     except grpc.RpcError as e:
         return {"error": f"{e.code().name}: {e.details()}"}
@@ -50,7 +52,7 @@ def get_current_weather(city_name: str):
 def get_weather_history(city: str, limit: int = 10):
 
     try:
-        client = MongoClient(MONGO_URI)
+        client = MongoClient(MONGO_URI, tz_aware=True)
         db = client[MONGO_DB]
         collection = db[MONGO_COLLECTION]
 

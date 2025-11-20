@@ -50,8 +50,15 @@ def weather_response_to_dict(resp):
         "rain_1h": resp.rain_1h,
         "clouds": resp.clouds,
         "timestamp": resp.timestamp,
-        "datetime": datetime.utcfromtimestamp(resp.timestamp), 
+        "datetime": datetime.utcfromtimestamp(resp.timestamp),
+        "api_timestamp": getattr(resp, "api_timestamp", None),
+        "api_datetime": datetime.utcfromtimestamp(getattr(resp, "api_timestamp", 0))
+            if getattr(resp, "api_timestamp", 0) else None,
+        "request_timestamp": getattr(resp, "request_timestamp", None),
+        "request_datetime": datetime.utcfromtimestamp(getattr(resp, "request_timestamp", 0))
+            if getattr(resp, "request_timestamp", 0) else None,
     }
+
 
 
 class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceServicer):
@@ -65,7 +72,7 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
             raise ValueError("Missing OPENWEATHER_API_KEY in environment variables or .env file")
 
         try:
-            self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+            self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000, tz_aware=True)
             self.db = self.mongo_client[db_name]
             self.collection = self.db[collection_name]
             logger.info(f"Connected to MongoDB at {mongo_uri}")
@@ -115,6 +122,7 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                 clouds = data.get("clouds", {}).get("all", 0)
                 sys_data = data.get("sys", {})
                 api_timestamp = data.get("dt", 0)
+                request_timestamp = int(datetime.now().timestamp())
 
                 weather_response = weather_microservice_pb2.WeatherResponse(
                     city=data.get("name", ""),
@@ -136,7 +144,9 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                     description=weather.get("description", ""),
                     rain_1h=rain,
                     clouds=clouds,
-                    timestamp=api_timestamp  
+                    timestamp=api_timestamp,
+                    api_timestamp=api_timestamp,
+                    request_timestamp=request_timestamp
                 )
 
             except (ValueError, KeyError, TypeError) as e:
