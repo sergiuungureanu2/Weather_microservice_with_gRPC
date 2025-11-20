@@ -5,6 +5,7 @@ from requests.exceptions import HTTPError, ConnectionError, Timeout, RequestExce
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 from dotenv import load_dotenv
+from datetime import datetime
 import os
 import logging
 
@@ -24,6 +25,12 @@ log_format = (
 logging.basicConfig(level=log_level, format=log_format)
 logger = logging.getLogger(__name__)
 
+if DEBUG_MODE:
+    logger.debug("Debug mode enabled — verbose logging active.")
+else:
+    logger.info("Running in production mode — minimal logging.")
+
+
 def weather_response_to_dict(resp):
     return {
         "city": resp.city,
@@ -42,8 +49,17 @@ def weather_response_to_dict(resp):
         "description": resp.description,
         "rain_1h": resp.rain_1h,
         "clouds": resp.clouds,
-        "timestamp": resp.timestamp
+        "timestamp": resp.timestamp,
+        "datetime": datetime.utcfromtimestamp(resp.timestamp),
+        "api_timestamp": getattr(resp, "api_timestamp", None),
+        "api_datetime": datetime.utcfromtimestamp(getattr(resp, "api_timestamp", 0))
+            if getattr(resp, "api_timestamp", 0) else None,
+        "request_timestamp": getattr(resp, "request_timestamp", None),
+        "request_datetime": datetime.utcfromtimestamp(getattr(resp, "request_timestamp", 0))
+            if getattr(resp, "request_timestamp", 0) else None,
     }
+
+
 
 class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceServicer):
     def __init__(self):
@@ -56,7 +72,7 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
             raise ValueError("Missing OPENWEATHER_API_KEY in environment variables or .env file")
 
         try:
-            self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+            self.mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000, tz_aware=True)
             self.db = self.mongo_client[db_name]
             self.collection = self.db[collection_name]
             logger.info(f"Connected to MongoDB at {mongo_uri}")
@@ -67,11 +83,17 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
     def GetWeather(self, request, context):
         city = request.city.strip()
         logger.info(f"Received gRPC request for city: {city}")
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.api_key}"
+
+        url = "https://api.openweathermap.org/data/2.5/weather"
+        params = {
+            "q": city,
+            "appid": self.api_key,
+            "units": "metric"
+        }
 
         try:
             try:
-                response = requests.get(url, timeout=10)
+                response = requests.get(url, params=params, timeout=10)
                 response.raise_for_status()
             except Timeout:
                 context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
@@ -99,6 +121,8 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                 rain = data.get("rain", {}).get("1h", 0)
                 clouds = data.get("clouds", {}).get("all", 0)
                 sys_data = data.get("sys", {})
+                api_timestamp = data.get("dt", 0)
+                request_timestamp = int(datetime.now().timestamp())
 
                 weather_response = weather_microservice_pb2.WeatherResponse(
                     city=data.get("name", ""),
@@ -120,7 +144,9 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                     description=weather.get("description", ""),
                     rain_1h=rain,
                     clouds=clouds,
-                    timestamp=data.get("dt", 0)
+                    timestamp=api_timestamp,
+                    api_timestamp=api_timestamp,
+                    request_timestamp=request_timestamp
                 )
 
             except (ValueError, KeyError, TypeError) as e:
@@ -128,7 +154,7 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                 context.set_details(f"Failed to parse weather data: {str(e)}")
                 return weather_microservice_pb2.WeatherResponse()
 
-            if self.collection:
+            if self.collection is not None:
                 try:
                     self.collection.insert_one(weather_response_to_dict(weather_response))
                     logger.info(f"Weather data for {city} saved to MongoDB")
@@ -136,9 +162,9 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
                     logger.warning(f"MongoDB error while saving data: {e}")
             else:
                 logger.warning("Skipping MongoDB save (no connection).")
+
             logger.info(f"Successfully processed weather data for {city}")
             return weather_response
-
         except Exception as e:
             logger.exception(f"Unexpected error while processing request for {city}: {e}")
             context.set_code(grpc.StatusCode.INTERNAL)

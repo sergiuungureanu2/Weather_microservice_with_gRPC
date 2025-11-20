@@ -30,6 +30,8 @@ message WeatherResponse {
     double rain_1h = 15;
     int32 clouds = 16;
     int64 timestamp = 17;
+    int64 api_timestamp = 18; 
+    int64 request_timestamp = 19;
 }
 
 //mesage for Coordinates
