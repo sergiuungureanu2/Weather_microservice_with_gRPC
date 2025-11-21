@@ -55,10 +55,20 @@ app.layout = html.Div([
 def update_dashboard(n_intervals, n_clicks, city):
     if not city:
         city = DEFAULT_CITY
+    else:
+        city = city.strip()
 
 
-    current = get_current_weather(city)
-    history = get_weather_history(city, limit=50)
+    try:
+        current = get_current_weather(city)
+    except Exception as e:
+        current = {"error": f"Failed to fetch current weather: {e}"}
+
+    try:
+        history = get_weather_history(city, limit=50)
+    except Exception as e:
+        history = []
+        current_display = html.Div(f"Error fetching history: {e}", className="ui red message")
 
     if "error" in current:
         current_display = html.Div(f" Error: {current['error']}", className="ui red message")
