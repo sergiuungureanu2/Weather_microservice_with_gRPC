@@ -15,6 +15,8 @@ DEBUG_MODE = os.getenv("DEBUG", "False").lower() == "true"
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 MONGO_DB = os.getenv("MONGO_DB", "weather_db")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "weather_logs")
+API_KEY = os.getenv("GRPC_API_KEY")
+
 
 def get_current_weather(city_name: str):
 
@@ -24,7 +26,8 @@ def get_current_weather(city_name: str):
         with grpc.insecure_channel(target) as channel:
             stub = weather_microservice_pb2_grpc.WeatherServiceStub(channel)
             request = weather_microservice_pb2.WeatherRequest(city=city_name)
-            response = stub.GetWeather(request, timeout=10)
+            metadata = [("x-api-key", API_KEY)]
+            response = stub.GetWeather(request, timeout=10, metadata=metadata)
 
             if not response.city:
                 return {"error": "Empty response from server"}
