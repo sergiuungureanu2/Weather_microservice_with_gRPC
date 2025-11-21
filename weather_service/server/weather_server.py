@@ -67,6 +67,7 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
         db_name = os.getenv("MONGO_DB", "weather_db")
         collection_name = os.getenv("MONGO_COLLECTION", "weather_logs")
         self.api_key = os.getenv("OPENWEATHER_API_KEY")
+        self.expected_grpc_key = os.getenv("GRPC_API_KEY")
 
         if not self.api_key:
             raise ValueError("Missing OPENWEATHER_API_KEY in environment variables or .env file")
@@ -81,6 +82,16 @@ class WeatherServiceServicer(weather_microservice_pb2_grpc.WeatherServiceService
             self.collection = None
 
     def GetWeather(self, request, context):
+        metadata = dict(context.invocation_metadata())
+        api_key = metadata.get("x-api-key")
+        if not api_key or api_key != self.expected_grpc_key:
+            logger.warning("Unauthorized request: invalid or missing API key.")
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details("Invalid or missing API key.")
+            return weather_microservice_pb2.WeatherResponse()
+        
+
+
         city = request.city.strip()
         logger.info(f"Received gRPC request for city: {city}")
 
